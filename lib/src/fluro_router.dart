@@ -14,6 +14,7 @@ import 'package:fluro/src/common.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 
 /// {@template fluro_router}
 /// Attach [FluroRouter] to [MaterialApp] by connnecting [FluroRouter.generator] to [MaterialApp.onGenerateRoute].
@@ -42,10 +43,13 @@ class FluroRouter {
       Duration transitionDuration = const Duration(milliseconds: 250),
       RouteTransitionsBuilder transitionBuilder}) {
     _routeTree.addRoute(
-      AppRoute(routePath, handler,
-          transitionType: transitionType,
-          transitionDuration: transitionDuration,
-          transitionBuilder: transitionBuilder),
+      AppRoute(
+        routePath,
+        handler,
+        transitionType: transitionType,
+        transitionDuration: transitionDuration,
+        transitionBuilder: transitionBuilder,
+      ),
     );
   }
 
@@ -69,12 +73,15 @@ class FluroRouter {
       Duration transitionDuration,
       RouteTransitionsBuilder transitionBuilder,
       RouteSettings routeSettings}) {
-    RouteMatch routeMatch = matchRoute(context, path,
-        transitionType: transition,
-        transitionsBuilder: transitionBuilder,
-        transitionDuration: transitionDuration,
-        maintainState: maintainState,
-        routeSettings: routeSettings);
+    RouteMatch routeMatch = matchRoute(
+      context,
+      path,
+      transitionType: transition,
+      transitionsBuilder: transitionBuilder,
+      transitionDuration: transitionDuration,
+      maintainState: maintainState,
+      routeSettings: routeSettings,
+    );
     Route<dynamic> route = routeMatch.route;
     Completer completer = Completer();
     Future future = completer.future;
@@ -85,8 +92,7 @@ class FluroRouter {
         route = _notFoundRoute(context, path, maintainState: maintainState);
       }
       if (route != null) {
-        final navigator =
-            Navigator.of(context, rootNavigator: rootNavigator);
+        final navigator = Navigator.of(context, rootNavigator: rootNavigator);
         if (clearStack) {
           future = navigator.pushAndRemoveUntil(route, (check) => false);
         } else {
@@ -110,22 +116,26 @@ class FluroRouter {
     RouteCreator<Null> creator =
         (RouteSettings routeSettings, Map<String, List<String>> parameters) {
       return MaterialPageRoute<Null>(
-          settings: routeSettings,
-          maintainState: maintainState,
-          builder: (BuildContext context) {
-            return notFoundHandler.handlerFunc(context, parameters);
-          });
+        settings: routeSettings,
+        maintainState: maintainState,
+        builder: (BuildContext context) {
+          return notFoundHandler.handlerFunc(context, parameters);
+        },
+      );
     };
     return creator(RouteSettings(name: path), null);
   }
 
   /// Attempt to match a route to the provided [path].
-  RouteMatch matchRoute(BuildContext buildContext, String path,
-      {RouteSettings routeSettings,
-      TransitionType transitionType,
-      Duration transitionDuration,
-      RouteTransitionsBuilder transitionsBuilder,
-      bool maintainState = true}) {
+  RouteMatch matchRoute(
+    BuildContext buildContext,
+    String path, {
+    RouteSettings routeSettings,
+    TransitionType transitionType,
+    Duration transitionDuration,
+    RouteTransitionsBuilder transitionsBuilder,
+    bool maintainState = true,
+  }) {
     RouteSettings settingsToUse = routeSettings;
     if (routeSettings == null) {
       settingsToUse = RouteSettings(name: path);
@@ -148,8 +158,9 @@ class FluroRouter {
     }
     if (route == null && notFoundHandler == null) {
       return RouteMatch(
-          matchType: RouteMatchType.noMatch,
-          errorMessage: "No matching route was found");
+        matchType: RouteMatchType.noMatch,
+        errorMessage: "No matching route was found",
+      );
     }
     Map<String, List<String>> parameters =
         match?.parameters ?? <String, List<String>>{};
@@ -163,43 +174,45 @@ class FluroRouter {
       bool isNativeTransition = (transition == TransitionType.native ||
           transition == TransitionType.nativeModal);
       if (isNativeTransition) {
-        return MaterialPageRoute<dynamic>(
-            settings: routeSettings,
-            fullscreenDialog: transition == TransitionType.nativeModal,
-            maintainState: maintainState,
-            builder: (BuildContext context) {
-              return handler.handlerFunc(context, parameters);
-            });
+        return MaterialWithModalsPageRoute<dynamic>(
+          settings: routeSettings,
+          fullscreenDialog: transition == TransitionType.nativeModal,
+          maintainState: maintainState,
+          builder: (BuildContext context) {
+            return handler.handlerFunc(context, parameters);
+          },
+        );
       } else if (transition == TransitionType.material ||
           transition == TransitionType.materialFullScreenDialog) {
-        return MaterialPageRoute<dynamic>(
-            settings: routeSettings,
-            fullscreenDialog:
-                transition == TransitionType.materialFullScreenDialog,
-            maintainState: maintainState,
-            builder: (BuildContext context) {
-              return handler.handlerFunc(context, parameters);
-            });
+        return MaterialWithModalsPageRoute<dynamic>(
+          settings: routeSettings,
+          fullscreenDialog:
+              transition == TransitionType.materialFullScreenDialog,
+          maintainState: maintainState,
+          builder: (BuildContext context) {
+            return handler.handlerFunc(context, parameters);
+          },
+        );
       } else if (transition == TransitionType.cupertino ||
           transition == TransitionType.cupertinoFullScreenDialog) {
-        return CupertinoPageRoute<dynamic>(
-            settings: routeSettings,
-            fullscreenDialog:
-                transition == TransitionType.cupertinoFullScreenDialog,
-            maintainState: maintainState,
-            builder: (BuildContext context) {
-              return handler.handlerFunc(context, parameters);
-            });
-      } else {
+        return MaterialWithModalsPageRoute<dynamic>(
+          settings: routeSettings,
+          fullscreenDialog:
+              transition == TransitionType.cupertinoFullScreenDialog,
+          maintainState: maintainState,
+          builder: (BuildContext context) {
+            return handler.handlerFunc(context, parameters);
+          },
+        );
+      } else if (transition == TransitionType.custom) {
         var routeTransitionsBuilder;
-
-        if (transition == TransitionType.custom) {
-          routeTransitionsBuilder =
-              transitionsBuilder ?? route?.transitionBuilder;
+        if (transitionsBuilder != null) {
+          routeTransitionsBuilder = transitionsBuilder;
+        } else if (route?.transitionBuilder != null) {
+          routeTransitionsBuilder = route?.transitionBuilder;
         } else {
-          routeTransitionsBuilder = _standardTransitionsBuilder(transition);
+          routeTransitionsBuilder = _standardTransitionsBuilder(transitionType);
         }
-
         return PageRouteBuilder<dynamic>(
           settings: routeSettings,
           maintainState: maintainState,
@@ -216,6 +229,14 @@ class FluroRouter {
           transitionsBuilder: transition == TransitionType.none
               ? (_, __, ___, child) => child
               : routeTransitionsBuilder,
+        );
+      } else {
+        return MaterialWithModalsPageRoute(
+          settings: routeSettings,
+          maintainState: maintainState,
+          builder: (BuildContext context) {
+            return handler.handlerFunc(context, parameters);
+          },
         );
       }
     };
